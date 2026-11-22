@@ -7,7 +7,7 @@ output="$(realpath -m -- "${1:?pass the release output directory}")"
 recipe_revision=87e62884e433543b59aaa2a28dcceb2e6f314054
 gcc_revision=afa9b4ecc0828b627cb5c57f71f8c5fa23e5a274
 version=14.4.1+r175+gafa9b4ecc082-1
-tag="gcc14-${version}"
+tag="gcc14-${version}-cuda1"
 
 if [[ $EUID == 0 || $(uname -m) != x86_64 ]]; then
     printf 'Run the release build as a non-root x86_64 Arch user.\n' >&2
