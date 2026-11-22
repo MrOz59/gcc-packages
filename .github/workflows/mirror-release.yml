@@ -1,0 +1,69 @@
+name: Mirror a release
+
+# Copies a published release, byte for byte, from another repository into
+# this one, so the assets keep the checksums the source release published.
+# Run it by hand from the Actions tab. The release tag is created here at the
+# same commit as the source release, and main must already contain that
+# commit (it carries the gcc14-arch-packages history).
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Repository to copy the release from
+        default: UsmanTariq2/gcc14-arch-packages
+      tag:
+        description: Release tag to copy
+        default: gcc14-14.4.1+r175+gafa9b4ecc082-1-cuda1
+
+permissions: {}
+
+jobs:
+  mirror:
+    name: Mirror ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Copy the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ inputs.source }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            echo "::error::${TAG} already has a release here."
+            exit 1
+          fi
+
+          mkdir dist
+          cd dist
+          gh release download "${TAG}" --repo "${SOURCE}"
+          sha256sum --check SHA256SUMS
+          # Every asset has to be covered by the checksums, or one could ride
+          # along unverified.
+          unlisted="$(comm -23 <(ls | grep -vxF SHA256SUMS | sort) <(awk '{print $2}' SHA256SUMS | sort))"
+          if [[ -n ${unlisted} ]]; then
+            echo "::error::Assets missing from SHA256SUMS: ${unlisted}"
+            exit 1
+          fi
+
+          commit="$(gh api "repos/${SOURCE}/commits/${TAG//+/%2B}" --jq .sha)"
+          if ! gh api "repos/${GITHUB_REPOSITORY}/commits/${commit}" --silent; then
+            echo "::error::${commit}, which ${TAG} points at, is not in this repository."
+            exit 1
+          fi
+          gh release view "${TAG}" --repo "${SOURCE}" --json name,body > source.json
+          title="$(jq -r .name source.json)"
+          jq -r .body source.json > ../notes.md
+          rm source.json
+
+          # Upload as a draft and publish only once every asset is there, so
+          # a consumer never sees a half-uploaded release.
+          gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" --target "${commit}" --draft \
+            --title "${title}" --notes-file ../notes.md -- *
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false
+
+          diff <(ls | sort) \
+            <(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name' | sort)
+          echo "Mirrored ${SOURCE}@${TAG} (${commit}) to ${GITHUB_REPOSITORY}."
