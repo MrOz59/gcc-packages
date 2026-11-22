@@ -1,0 +1,68 @@
+name: Release Arch CUDA host compiler
+
+on:
+  push:
+    tags:
+      - 'gcc14-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gcc14-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: archlinux:base-devel@sha256:97119fd9e21219b02b3c14ba256c9d3c0d031d07fc26c836c41ed793beeb5b74
+    steps:
+      - name: Provision official Arch build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git libisl libmpc python zstd
+          useradd --create-home --user-group gcc-builder
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and verify C and C++ compiler packages
+        shell: bash
+        run: |
+          chown -R gcc-builder:gcc-builder "$GITHUB_WORKSPACE"
+          runuser -u gcc-builder -- env -i HOME=/home/gcc-builder PATH=/usr/bin:/bin \
+            LANG=C.UTF-8 GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+            bash scripts/build-release.sh "$GITHUB_WORKSPACE/target/dist"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gcc14-release
+          path: target/dist/
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gcc14-release
+          path: dist
+
+      - name: Publish the verified compiler and matching source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+            --title "Arch Linux $GITHUB_REF_NAME for CUDA" \
+            --notes 'x86_64 Arch C/C++ GCC 14 packages for the CUDA host compiler. Assets include the exact GCC source, AUR recipe, build patch, provenance, and SHA-256 checksums.' \
+            -- *.pkg.tar.zst *.tar.gz gcc14-cuda.patch makepkg.conf BUILD-INFO.txt SHA256SUMS
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

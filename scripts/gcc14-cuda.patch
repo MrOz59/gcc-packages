@@ -1,0 +1,49 @@
+--- a/PKGBUILD
++++ b/PKGBUILD
+@@ -10 +10 @@
+-pkgname=(gcc14 gcc14-libs gcc14-fortran)
++pkgname=(gcc14 gcc14-libs)
+@@ -20,3 +19,0 @@
+-  doxygen
+-  gcc-ada
+-  gcc-d
+@@ -72 +68,0 @@
+-      --with-build-config=bootstrap-lto
+@@ -106,2 +102,2 @@
+-    --enable-languages=c,c++,fortran \
+-    --enable-bootstrap \
++    --enable-languages=c,c++ \
++    --disable-bootstrap \
+@@ -110,10 +106 @@
+-  # see https://bugs.archlinux.org/task/71777 for rationale re *FLAGS handling
+-  make -O STAGE1_CFLAGS="-O2" \
+-          BOOT_CFLAGS="$CFLAGS" \
+-          BOOT_LDFLAGS="$LDFLAGS" \
+-          LDFLAGS_FOR_TARGET="$LDFLAGS" \
+-          bootstrap \
+-          -j$(nproc)
+-
+-  # make documentation
+-  make -O -C $CHOST/libstdc++-v3/doc doc-man-doxygen
++  make -O -j"$(nproc)" all
+@@ -143 +129,0 @@
+-             libgfortran.so \
+@@ -234,18 +219,0 @@
+-package_gcc14-fortran() {
+-  pkgdesc='Fortran front-end for GCC (14.x.x)'
+-  depends=("gcc14" libisl.so)
+-
+-  cd gcc-build
+-  make -C $CHOST/libgfortran DESTDIR="$pkgdir" install-cafexeclibLTLIBRARIES \
+-    install-{toolexeclibDATA,nodist_fincludeHEADERS,gfor_cHEADERS}
+-  make -C $CHOST/libgomp DESTDIR="$pkgdir" install-nodist_fincludeHEADERS
+-  make -C gcc DESTDIR="$pkgdir" fortran.install-common
+-  install -Dm755 gcc/f951 "$pkgdir/${_libdir}/f951"
+-
+-  ln -s gfortran-14 "$pkgdir/usr/bin/f95-14"
+-
+-  # Install Runtime Library Exception
+-  install -d "$pkgdir/usr/share/licenses/$pkgname/"
+-  ln -s /usr/share/licenses/gcc14-libs/RUNTIME.LIBRARY.EXCEPTION \
+-    "$pkgdir/usr/share/licenses/$pkgname/"
+-}
